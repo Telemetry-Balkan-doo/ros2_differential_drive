@@ -53,9 +53,14 @@ from geometry_msgs.msg import Twist
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
 from tf2_ros import TransformBroadcaster
+from std_msgs.msg import Int64
+from std_msgs.msg import Int32
 from std_msgs.msg import Int16
 
 NS_TO_SEC= 1000000000
+
+int_high = 0
+int_low = 32767
 
 class DiffTf(Node):
     """
@@ -71,20 +76,20 @@ class DiffTf(Node):
         self.get_logger().info(f"-I- {self.nodename} started")
 
         #### parameters #######
-        self.rate_hz = self.declare_parameter("rate_hz", 10.0).value # the rate at which to publish the transform
-        self.create_timer(1.0/self.rate_hz, self.update)  
+        self.rate_hz = self.declare_parameter("rate_hz", 1.0).value # the rate at which to publish the transform   
+        self.create_timer(1.0/self.rate_hz, self.update)  #rate_hz = 100 (old)
 
         self.ticks_meter = float(
-            self.declare_parameter('ticks_meter', 50).value)  # The number of wheel encoder ticks per meter of travel
-        self.base_width = float(self.declare_parameter('base_width', 0.245).value)  # The wheel base width in meters
+            self.declare_parameter('ticks_meter', 15293).value)  # The number of wheel encoder ticks per meter of travel
+        self.base_width = float(self.declare_parameter('base_width', 0.38).value)  # The wheel base width in meters   0.38
 
         self.base_frame_id = self.declare_parameter('base_frame_id',
                                                     'base_link').value  # the name of the base frame of the robot
         self.odom_frame_id = self.declare_parameter('odom_frame_id',
                                                     'odom').value  # the name of the odometry reference frame
 
-        self.encoder_min = self.declare_parameter('encoder_min', -32768).value
-        self.encoder_max = self.declare_parameter('encoder_max', 32768).value
+        self.encoder_min = self.declare_parameter('encoder_min', -2000000000).value
+        self.encoder_max = self.declare_parameter('encoder_max', 2000000000).value
         self.encoder_low_wrap = self.declare_parameter('wheel_low_wrap', (
                 self.encoder_max - self.encoder_min) * 0.3 + self.encoder_min).value
         self.encoder_high_wrap = self.declare_parameter('wheel_high_wrap', (
@@ -107,11 +112,10 @@ class DiffTf(Node):
         self.then = self.get_clock().now()
 
         # subscriptions
-        self.create_subscription(Int16, "lwheel", self.lwheel_callback, 10)
-        self.create_subscription(Int16, "rwheel", self.rwheel_callback, 10)
+        self.create_subscription(Int32, "lwheel", self.lwheel_callback, 10)
+        self.create_subscription(Int32, "rwheel", self.rwheel_callback, 10)
         self.odom_pub = self.create_publisher(Odometry, "odom", 10)
         self.odom_broadcaster = TransformBroadcaster(self)
-
 
     def update(self):
         now = self.get_clock().now()
@@ -141,6 +145,7 @@ class DiffTf(Node):
             # calculate distance traveled in x and y
             x = cos(th) * d
             y = -sin(th) * d
+            # print("Updating x,y =" + str(x)+","+str(y))
             # calculate the final position of the robot
             self.x = self.x + (cos(self.th) * x - sin(self.th) * y)
             self.y = self.y + (sin(self.th) * x + cos(self.th) * y)
@@ -156,8 +161,10 @@ class DiffTf(Node):
 
         transform_stamped_msg = TransformStamped()
         transform_stamped_msg.header.stamp = self.get_clock().now().to_msg()
-        transform_stamped_msg.header.frame_id = self.base_frame_id
-        transform_stamped_msg.child_frame_id = self.odom_frame_id
+        # transform_stamped_msg.header.frame_id = self.base_frame_id
+        # transform_stamped_msg.child_frame_id = self.odom_frame_id
+        transform_stamped_msg.header.frame_id = self.odom_frame_id
+        transform_stamped_msg.child_frame_id = self.base_frame_id
         transform_stamped_msg.transform.translation.x = self.x
         transform_stamped_msg.transform.translation.y = self.y
         transform_stamped_msg.transform.translation.z = 0.0
@@ -183,15 +190,17 @@ class DiffTf(Node):
 
     def lwheel_callback(self, msg):
         enc = msg.data
+        print(msg.data)
         if enc < self.encoder_low_wrap and self.prev_lencoder > self.encoder_high_wrap:
             self.lmult = self.lmult + 1
 
         if enc > self.encoder_high_wrap and self.prev_lencoder < self.encoder_low_wrap:
             self.lmult = self.lmult - 1
-
+        print(self.lmult)
         self.left = 1.0 * (enc + self.lmult * (self.encoder_max - self.encoder_min))
         self.prev_lencoder = enc
 
+        
     def rwheel_callback(self, msg):
         enc = msg.data
         if enc < self.encoder_low_wrap and self.prev_rencoder > self.encoder_high_wrap:
@@ -203,6 +212,8 @@ class DiffTf(Node):
         self.right = 1.0 * (enc + self.rmult * (self.encoder_max - self.encoder_min))
         self.prev_rencoder = enc
 
+        # print(self.right)
+    
 
 def main(args=None):
     rclpy.init(args=args)
