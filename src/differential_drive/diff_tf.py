@@ -46,7 +46,7 @@
 
 import rclpy
 from rclpy.node import Node
-from math import sin, cos, pi
+from math import sin, cos, pi, atan2
 
 from geometry_msgs.msg import Quaternion
 from geometry_msgs.msg import Twist
@@ -56,11 +56,13 @@ from tf2_ros import TransformBroadcaster
 from std_msgs.msg import Int64
 from std_msgs.msg import Int32
 from std_msgs.msg import Int16
+from geometry_msgs.msg import PoseWithCovarianceStamped  
 
 NS_TO_SEC= 1000000000
 
 int_high = 0
 int_low = 32767
+
 
 class DiffTf(Node):
     """
@@ -76,15 +78,29 @@ class DiffTf(Node):
         self.get_logger().info(f"-I- {self.nodename} started")
 
         #### parameters #######
-        self.rate_hz = self.declare_parameter("rate_hz", 1.0).value # the rate at which to publish the transform   
+        self.rate_hz = self.declare_parameter("rate_hz", 10.0).value # the rate at which to publish the transform   
         self.create_timer(1.0/self.rate_hz, self.update)  #rate_hz = 100 (old)
 
         self.ticks_meter = float(
-            self.declare_parameter('ticks_meter', 15293).value)  # The number of wheel encoder ticks per meter of travel
+            self.declare_parameter('ticks_meter', 15293).value)  # The number of wheel encoder ticks per meter of travel #15293
         self.base_width = float(self.declare_parameter('base_width', 0.38).value)  # The wheel base width in meters   0.38
 
-        self.base_frame_id = self.declare_parameter('base_frame_id',
-                                                    'base_link').value  # the name of the base frame of the robot
+        
+        self.declare_parameter('use_base_link', False)
+        self.use_base_link = self.get_parameter('use_base_link').value
+
+        if self.use_base_link == False:
+            self.base_frame_id = self.declare_parameter('base_frame_id', 'base_link').value
+        if self.use_base_link == True:
+            self.base_frame_id = self.declare_parameter('base_frame_id', 'base_footprint').value
+
+
+        # transform 'base_frame_id' -> 'base_link' for discover mode (with slam)
+        # transform 'bse_frame_id' -> 'base_footprint' for static map mode (without slam)
+        # self.base_frame_id = self.declare_parameter('base_frame_id',
+                                                    # 'base_footprint').value  # the name of the base frame of the robot
+                                                    # 'base_link').value  # the name of the base frame of the robot
+
         self.odom_frame_id = self.declare_parameter('odom_frame_id',
                                                     'odom').value  # the name of the odometry reference frame
 
@@ -96,6 +112,9 @@ class DiffTf(Node):
                 self.encoder_max - self.encoder_min) * 0.7 + self.encoder_min).value
 
         # internal data
+        self.rticks_per_sec = 0
+        self.lticks_per_sec = 0
+
         self.enc_left = None  # wheel encoder readings
         self.enc_right = None
         self.left = 0.0  # actual values coming back from robot
@@ -110,12 +129,19 @@ class DiffTf(Node):
         self.dx = 0.0  # speeds in x/rotation
         self.dr = 0.0
         self.then = self.get_clock().now()
+        
+        # !!! addading deserialize parametrs x y theta (th)
 
         # subscriptions
+        self.create_subscription(Int32, "ltics_per_sec", self.lticks_listener_calback, 10)
+        self.create_subscription(Int32, "rtics_per_sec", self.rticks_listener_calback, 10)
         self.create_subscription(Int32, "lwheel", self.lwheel_callback, 10)
         self.create_subscription(Int32, "rwheel", self.rwheel_callback, 10)
+        self.create_subscription(PoseWithCovarianceStamped, "initialpose", self.initialpose_calback, 10)
+
         self.odom_pub = self.create_publisher(Odometry, "odom", 10)
         self.odom_broadcaster = TransformBroadcaster(self)
+
 
     def update(self):
         now = self.get_clock().now()
@@ -123,29 +149,50 @@ class DiffTf(Node):
         self.then = now
         elapsed = elapsed.nanoseconds / NS_TO_SEC
 
+        # self.get_logger().info(f"X = {self.x}")
+        # self.get_logger().info(f"Y = {self.y}")
+        # self.get_logger().info(f"TH = {self.th}")
+
         # calculate odometry
         if self.enc_left == None:
             d_left = 0
             d_right = 0
+
+            d_vel_left = 0
+            d_vel_right = 0
+
         else:
+        # #############################################################
             d_left = (self.left - self.enc_left) / self.ticks_meter
             d_right = (self.right - self.enc_right) / self.ticks_meter
+            d_vel_left = (self.lticks_per_sec) / self.ticks_meter
+            d_vel_right = (self.rticks_per_sec) / self.ticks_meter    
         self.enc_left = self.left
         self.enc_right = self.right
+        # #############################################################
+
+        # self.rticks_per_sec = 0
+        # self.lticks_per_sec = 0
 
         # distance traveled is the average of the two wheels 
         d = (d_left + d_right) / 2
+        d_vel = (d_vel_left + d_vel_right) / 2
+
         # this approximation works (in radians) for small angles
         th = (d_right - d_left) / self.base_width
+        th_vel = (d_vel_right - d_vel_left) / self.base_width
+        # #############################################################
+
         # calculate velocities
         self.dx = d / elapsed
         self.dr = th / elapsed
+
+        # #############################################################
 
         if d != 0:
             # calculate distance traveled in x and y
             x = cos(th) * d
             y = -sin(th) * d
-            # print("Updating x,y =" + str(x)+","+str(y))
             # calculate the final position of the robot
             self.x = self.x + (cos(self.th) * x - sin(self.th) * y)
             self.y = self.y + (sin(self.th) * x + cos(self.th) * y)
@@ -183,24 +230,24 @@ class DiffTf(Node):
         odom.pose.pose.position.z = 0.0
         odom.pose.pose.orientation = quaternion
         odom.child_frame_id = self.base_frame_id
-        odom.twist.twist.linear.x = self.dx
+        odom.twist.twist.linear.x = d_vel
         odom.twist.twist.linear.y = 0.0
-        odom.twist.twist.angular.z = self.dr
+        odom.twist.twist.angular.z = th_vel
         self.odom_pub.publish(odom)
+
 
     def lwheel_callback(self, msg):
         enc = msg.data
-        print(msg.data)
+       
         if enc < self.encoder_low_wrap and self.prev_lencoder > self.encoder_high_wrap:
             self.lmult = self.lmult + 1
 
         if enc > self.encoder_high_wrap and self.prev_lencoder < self.encoder_low_wrap:
             self.lmult = self.lmult - 1
-        print(self.lmult)
+    
         self.left = 1.0 * (enc + self.lmult * (self.encoder_max - self.encoder_min))
         self.prev_lencoder = enc
-
-        
+           
     def rwheel_callback(self, msg):
         enc = msg.data
         if enc < self.encoder_low_wrap and self.prev_rencoder > self.encoder_high_wrap:
@@ -212,9 +259,21 @@ class DiffTf(Node):
         self.right = 1.0 * (enc + self.rmult * (self.encoder_max - self.encoder_min))
         self.prev_rencoder = enc
 
-        # print(self.right)
     
+    def lticks_listener_calback(self, msg):
+        self.lticks_per_sec = msg.data
 
+    def rticks_listener_calback(self, msg):
+        self.rticks_per_sec = msg.data * (-1)
+
+    def initialpose_calback(self, msg):
+        self.x = msg.pose.pose.position.x
+        self.y = msg.pose.pose.position.y
+        self.th = self.quaternion_to_theta(self.x, self.y)
+
+    def quaternion_to_theta(self, q_z, q_w):
+        return 2 * atan2(q_z, q_w)
+    
 def main(args=None):
     rclpy.init(args=args)
     try:
