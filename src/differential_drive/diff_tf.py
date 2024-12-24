@@ -47,6 +47,7 @@
 import rclpy
 from rclpy.node import Node
 from math import sin, cos, pi, atan2
+import numpy as np
 
 from geometry_msgs.msg import Quaternion
 from geometry_msgs.msg import Twist
@@ -77,13 +78,18 @@ class DiffTf(Node):
         self.nodename = "diff_tf"
         self.get_logger().info(f"-I- {self.nodename} started")
 
+
+        self.declare_parameter('wheel_distance', 0.38)
+        self.base_width = self.get_parameter('wheel_distance').get_parameter_value().double_value
+        self.get_logger().info('Started with base_width: %s' % self.base_width)
+
         #### parameters #######
         self.rate_hz = self.declare_parameter("rate_hz", 10.0).value # the rate at which to publish the transform   
         self.create_timer(1.0/self.rate_hz, self.update)  #rate_hz = 100 (old)
 
         self.ticks_meter = float(
             self.declare_parameter('ticks_meter', 15293).value)  # The number of wheel encoder ticks per meter of travel #15293
-        self.base_width = float(self.declare_parameter('base_width', 0.38).value)  # The wheel base width in meters   0.38
+        # self.base_width = float(self.declare_parameter('base_width', 0.38).value)  # The wheel base width in meters   0.38
 
         
         self.declare_parameter('use_base_link', False)
@@ -139,9 +145,19 @@ class DiffTf(Node):
         self.create_subscription(Int32, "rwheel", self.rwheel_callback, 10)
         self.create_subscription(PoseWithCovarianceStamped, "initialpose", self.initialpose_calback, 10)
 
+        self.create_subscription(
+            Int32,
+            'o2d_set_wheel_distance',
+            self.__o2d_wheel_distance_subscriber_callback,
+            10)
+
         self.odom_pub = self.create_publisher(Odometry, "odom", 10)
         self.odom_broadcaster = TransformBroadcaster(self)
 
+    def __o2d_wheel_distance_subscriber_callback(self, msg):
+        wheel_distance = np.array(msg.data)
+        self.get_logger().info('%s' % wheel_distance)
+        self.base_width = wheel_distance / 1000
 
     def update(self):
         now = self.get_clock().now()
