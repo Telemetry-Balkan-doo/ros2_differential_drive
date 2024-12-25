@@ -91,14 +91,13 @@ class DiffTf(Node):
             self.declare_parameter('ticks_meter', 15293).value)  # The number of wheel encoder ticks per meter of travel #15293
         # self.base_width = float(self.declare_parameter('base_width', 0.38).value)  # The wheel base width in meters   0.38
 
-        
-        self.declare_parameter('use_base_link', False)
-        self.use_base_link = self.get_parameter('use_base_link').value
+        self.declare_parameter('mode')
+        self.mode = self.get_parameter('mode').value
 
-        if self.use_mode == 'mapping':
-            self.base_frame_id = self.declare_parameter('base_frame_id', 'base_link').value
-        if self.use_mode == 'localization':
-            self.base_frame_id = self.declare_parameter('base_frame_id', 'base_footprint').value
+        if self.mode == 'mapping':
+            self.base_frame_id = 'base_link'
+        if self.mode == 'localization':
+            self.base_frame_id = 'base_footprint'
 
         self.odom_frame_id = self.declare_parameter('odom_frame_id',
                                                     'odom').value  # the name of the odometry reference frame
