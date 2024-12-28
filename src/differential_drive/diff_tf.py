@@ -95,17 +95,7 @@ class DiffTf(Node):
         self.declare_parameter('use_base_link', False)
         self.use_base_link = self.get_parameter('use_base_link').value
 
-        if self.use_base_link == False:
-            self.base_frame_id = self.declare_parameter('base_frame_id', 'base_link').value
-        if self.use_base_link == True:
-            self.base_frame_id = self.declare_parameter('base_frame_id', 'base_footprint').value
-
-
-        # transform 'base_frame_id' -> 'base_link' for discover mode (with slam)
-        # transform 'bse_frame_id' -> 'base_footprint' for static map mode (without slam)
-        # self.base_frame_id = self.declare_parameter('base_frame_id',
-                                                    # 'base_footprint').value  # the name of the base frame of the robot
-                                                    # 'base_link').value  # the name of the base frame of the robot
+        self.base_frame_id = self.declare_parameter('base_frame_id', 'base_link').value
 
         self.odom_frame_id = self.declare_parameter('odom_frame_id',
                                                     'odom').value  # the name of the odometry reference frame
