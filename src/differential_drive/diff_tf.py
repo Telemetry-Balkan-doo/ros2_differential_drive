@@ -282,14 +282,16 @@ class DiffTf(Node):
     
 def main(args=None):
     rclpy.init(args=args)
+    diff_tf = DiffTf()
+
     try:
-        diff_tf = DiffTf()
         rclpy.spin(diff_tf)
-    except rclpy.exceptions.ROSInterruptException:
+    except (KeyboardInterrupt, rclpy.exceptions.ROSInterruptException):
         pass
 
     diff_tf.destroy_node()
-    rclpy.shutdown()
+    if rclpy.get_default_context().ok():
+        rclpy.shutdown()
 
 
 if __name__ == '__main__':
