@@ -79,8 +79,8 @@ class DiffTf(Node):
         self.get_logger().info(f"-I- {self.nodename} started")
 
 
-        self.declare_parameter('wheel_distance', 0.38)
-        self.base_width = self.get_parameter('wheel_distance').get_parameter_value().double_value
+        self.declare_parameter('wheels_distance', 0.38)
+        self.base_width = self.get_parameter('wheels_distance').get_parameter_value().double_value
         self.get_logger().info('Started with base_width: %s' % self.base_width)
 
         #### parameters #######
@@ -137,17 +137,17 @@ class DiffTf(Node):
 
         self.create_subscription(
             Int32,
-            'o2d_set_wheel_distance',
-            self.__o2d_wheel_distance_subscriber_callback,
+            'o2d_set_wheels_distance',
+            self.__o2d_wheels_distance_subscriber_callback,
             10)
 
         self.odom_pub = self.create_publisher(Odometry, "odom", 10)
         self.odom_broadcaster = TransformBroadcaster(self)
 
-    def __o2d_wheel_distance_subscriber_callback(self, msg):
-        wheel_distance = np.array(msg.data)
-        self.get_logger().info('%s' % wheel_distance)
-        self.base_width = wheel_distance / 1000
+    def __o2d_wheels_distance_subscriber_callback(self, msg):
+        wheels_distance = np.array(msg.data)
+        self.get_logger().info('%s' % wheels_distance)
+        self.base_width = wheels_distance / 1000
 
     def update(self):
         now = self.get_clock().now()
