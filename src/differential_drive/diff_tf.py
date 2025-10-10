@@ -46,18 +46,15 @@
 
 import rclpy
 from rclpy.node import Node
-from math import sin, cos, pi, atan2
+from math import sin, cos, atan2
 import numpy as np
 
 from geometry_msgs.msg import Quaternion
-from geometry_msgs.msg import Twist
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
 from tf2_ros import TransformBroadcaster
-from std_msgs.msg import Int64
-from std_msgs.msg import Int32
-from std_msgs.msg import Int16
-from geometry_msgs.msg import PoseWithCovarianceStamped  
+from std_msgs.msg import Int32, Float64
+from geometry_msgs.msg import PoseWithCovarianceStamped
 
 NS_TO_SEC= 1000000000
 
@@ -129,14 +126,14 @@ class DiffTf(Node):
         # !!! addading deserialize parametrs x y theta (th)
 
         # subscriptions
-        self.create_subscription(Int32, "ltics_per_sec", self.lticks_listener_calback, 10)
-        self.create_subscription(Int32, "rtics_per_sec", self.rticks_listener_calback, 10)
+        self.create_subscription(Int32, "lticks_per_sec", self.lticks_listener_calback, 10)
+        self.create_subscription(Int32, "rticks_per_sec", self.rticks_listener_calback, 10)
         self.create_subscription(Int32, "lwheel", self.lwheel_callback, 10)
         self.create_subscription(Int32, "rwheel", self.rwheel_callback, 10)
         self.create_subscription(PoseWithCovarianceStamped, "initialpose", self.initialpose_calback, 10)
 
         self.create_subscription(
-            Int32,
+            Float64,
             'o2d_set_wheels_distance',
             self.__o2d_wheels_distance_subscriber_callback,
             10)
@@ -147,7 +144,7 @@ class DiffTf(Node):
     def __o2d_wheels_distance_subscriber_callback(self, msg):
         wheels_distance = np.array(msg.data)
         self.get_logger().info('%s' % wheels_distance)
-        self.base_width = wheels_distance / 1000
+        self.base_width = wheels_distance
 
     def update(self):
         now = self.get_clock().now()
@@ -172,7 +169,7 @@ class DiffTf(Node):
             d_left = (self.left - self.enc_left) / self.ticks_meter
             d_right = (self.right - self.enc_right) / self.ticks_meter
             d_vel_left = (self.lticks_per_sec) / self.ticks_meter
-            d_vel_right = (self.rticks_per_sec) / self.ticks_meter    
+            d_vel_right = (self.rticks_per_sec) / self.ticks_meter
         self.enc_left = self.left
         self.enc_right = self.right
         # #############################################################
