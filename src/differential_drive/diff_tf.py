@@ -89,7 +89,7 @@ class DiffTf(Node):
         # self.base_width = float(self.declare_parameter('base_width', 0.38).value)  # The wheel base width in meters   0.38
         self.get_logger().info(f"ticks_meter: {self.ticks_meter }")
 
-        self.declare_parameter('use_base_link', False)
+        self.declare_parameter('use_base_link', True)
         self.use_base_link = self.get_parameter('use_base_link').value
 
         self.base_frame_id = self.declare_parameter('base_frame_id', 'base_link').value
@@ -138,7 +138,7 @@ class DiffTf(Node):
             self.__o2d_wheels_distance_subscriber_callback,
             10)
 
-        self.odom_pub = self.create_publisher(Odometry, "odom", 10)
+        self.odom_pub = self.create_publisher(Odometry, "/wheel/odom", 10)
         self.odom_broadcaster = TransformBroadcaster(self)
 
     def __o2d_wheels_distance_subscriber_callback(self, msg):
@@ -151,10 +151,6 @@ class DiffTf(Node):
         elapsed = now - self.then
         self.then = now
         elapsed = elapsed.nanoseconds / NS_TO_SEC
-
-        # self.get_logger().info(f"X = {self.x}")
-        # self.get_logger().info(f"Y = {self.y}")
-        # self.get_logger().info(f"TH = {self.th}")
 
         # calculate odometry
         if self.enc_left == None:
@@ -209,21 +205,21 @@ class DiffTf(Node):
         quaternion.z = sin(self.th / 2)
         quaternion.w = cos(self.th / 2)
 
-        transform_stamped_msg = TransformStamped()
-        transform_stamped_msg.header.stamp = self.get_clock().now().to_msg()
-        # transform_stamped_msg.header.frame_id = self.base_frame_id
-        # transform_stamped_msg.child_frame_id = self.odom_frame_id
-        transform_stamped_msg.header.frame_id = self.odom_frame_id
-        transform_stamped_msg.child_frame_id = self.base_frame_id
-        transform_stamped_msg.transform.translation.x = self.x
-        transform_stamped_msg.transform.translation.y = self.y
-        transform_stamped_msg.transform.translation.z = 0.0
-        transform_stamped_msg.transform.rotation.x = quaternion.x
-        transform_stamped_msg.transform.rotation.y = quaternion.y
-        transform_stamped_msg.transform.rotation.z = quaternion.z
-        transform_stamped_msg.transform.rotation.w = quaternion.w
+        # transform_stamped_msg = TransformStamped()
+        # transform_stamped_msg.header.stamp = self.get_clock().now().to_msg()
+        # # transform_stamped_msg.header.frame_id = self.base_frame_id
+        # # transform_stamped_msg.child_frame_id = self.odom_frame_id
+        # transform_stamped_msg.header.frame_id = self.odom_frame_id
+        # transform_stamped_msg.child_frame_id = self.base_frame_id
+        # transform_stamped_msg.transform.translation.x = self.x
+        # transform_stamped_msg.transform.translation.y = self.y
+        # transform_stamped_msg.transform.translation.z = 0.0
+        # transform_stamped_msg.transform.rotation.x = quaternion.x
+        # transform_stamped_msg.transform.rotation.y = quaternion.y
+        # transform_stamped_msg.transform.rotation.z = quaternion.z
+        # transform_stamped_msg.transform.rotation.w = quaternion.w
 
-        self.odom_broadcaster.sendTransform(transform_stamped_msg)
+        # self.odom_broadcaster.sendTransform(transform_stamped_msg)
 
         odom = Odometry()
         odom.header.stamp = now.to_msg()
@@ -267,7 +263,7 @@ class DiffTf(Node):
         self.lticks_per_sec = msg.data
 
     def rticks_listener_calback(self, msg):
-        self.rticks_per_sec = msg.data * (-1)
+        self.rticks_per_sec = msg.data
 
     def initialpose_calback(self, msg):
         self.x = msg.pose.pose.position.x
