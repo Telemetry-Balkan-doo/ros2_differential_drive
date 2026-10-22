@@ -34,7 +34,7 @@ class WheelLoopback(Node):
 
         self.rate = self.declare_parameter("rate", 200).value
         self.timeout_secs = self.declare_parameter("timeout_secs", 0.5).value
-        self.ticks_meter = float(self.declare_parameter('ticks_meter', 50).value)
+        self.ticks_per_meter = float(self.declare_parameter('ticks_per_meter', 50).value)
         self.velocity_scale = float(self.declare_parameter('velocity_scale', 255).value)
         self.latest_motor = 0
 
@@ -70,7 +70,7 @@ class WheelLoopback(Node):
     def spin_once(self):
         self.velocity = self.latest_motor / self.velocity_scale
         if abs(self.velocity) > 0:
-            self.seconds_per_tick = abs(1 / (self.velocity * self.ticks_meter))
+            self.seconds_per_tick = abs(1 / (self.velocity * self.ticks_per_meter))
             elapsed = self.get_clock().now() - self.then
             elapsed = elapsed.to_msg().sec
             self.get_logger().info(

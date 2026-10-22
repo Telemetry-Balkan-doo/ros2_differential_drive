@@ -46,8 +46,8 @@
 
 import rclpy
 from rclpy.node import Node
-from math import sin, cos, atan2
-import numpy as np
+from rclpy.qos import QoSProfile, DurabilityPolicy
+from math import sin, cos, atan2, isfinite
 
 from geometry_msgs.msg import Quaternion
 from geometry_msgs.msg import TransformStamped
@@ -84,10 +84,10 @@ class DiffTf(Node):
         self.rate_hz = self.declare_parameter("rate_hz", 10.0).value # the rate at which to publish the transform   
         self.create_timer(1.0/self.rate_hz, self.update)  #rate_hz = 100 (old)
 
-        self.ticks_meter = float(
-            self.declare_parameter('ticks_meter', 15293).value)  # The number of wheel encoder ticks per meter of travel #15293
+        self.ticks_per_meter = float(
+            self.declare_parameter('ticks_per_meter', 15293).value)  # The number of wheel encoder ticks per meter of travel #15293
         # self.base_width = float(self.declare_parameter('base_width', 0.38).value)  # The wheel base width in meters   0.38
-        self.get_logger().info(f"ticks_meter: {self.ticks_meter }")
+        self.get_logger().info(f"ticks_per_meter: {self.ticks_per_meter }")
 
         self.declare_parameter('use_base_link', True)
         self.use_base_link = self.get_parameter('use_base_link').value
@@ -138,13 +138,34 @@ class DiffTf(Node):
             self.__o2d_wheels_distance_subscriber_callback,
             10)
 
+        self.create_subscription(
+            Float64,
+            'o2d_set_ticks_per_meter',
+            self.__o2d_ticks_per_meter_subscriber_callback,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+
         self.odom_pub = self.create_publisher(Odometry, "/wheel/odom", 10)
         self.odom_broadcaster = TransformBroadcaster(self)
 
     def __o2d_wheels_distance_subscriber_callback(self, msg):
-        wheels_distance = np.array(msg.data)
-        self.get_logger().info('%s' % wheels_distance)
+        wheels_distance = float(msg.data)
+        if not isfinite(wheels_distance) or wheels_distance <= 0:
+            self.get_logger().warning(f"Ignoring invalid wheels_distance: {wheels_distance}")
+            return
         self.base_width = wheels_distance
+        self.__log_wheel_parameters()
+
+    def __o2d_ticks_per_meter_subscriber_callback(self, msg):
+        ticks_per_meter = float(msg.data)
+        if not isfinite(ticks_per_meter) or ticks_per_meter <= 0:
+            self.get_logger().warning(f"Ignoring invalid ticks_per_meter: {ticks_per_meter}")
+            return
+        self.ticks_per_meter = ticks_per_meter
+        self.__log_wheel_parameters()
+
+    def __log_wheel_parameters(self):
+        self.get_logger().info(
+            f"Applied wheel parameters: ticks_per_meter={self.ticks_per_meter}, wheels_distance={self.base_width}")
 
     def update(self):
         now = self.get_clock().now()
@@ -162,10 +183,10 @@ class DiffTf(Node):
 
         else:
         # #############################################################
-            d_left = (self.left - self.enc_left) / self.ticks_meter
-            d_right = (self.right - self.enc_right) / self.ticks_meter
-            d_vel_left = (self.lticks_per_sec) / self.ticks_meter
-            d_vel_right = (self.rticks_per_sec) / self.ticks_meter
+            d_left = (self.left - self.enc_left) / self.ticks_per_meter
+            d_right = (self.right - self.enc_right) / self.ticks_per_meter
+            d_vel_left = (self.lticks_per_sec) / self.ticks_per_meter
+            d_vel_right = (self.rticks_per_sec) / self.ticks_per_meter
         self.enc_left = self.left
         self.enc_right = self.right
         # #############################################################
